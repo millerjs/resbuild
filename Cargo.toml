@@ -1,0 +1,22 @@
+[package]
+name = "esbuild"
+version = "0.1.0"
+authors = ["Joshua Miller <jsmiller@uchicago.edu>"]
+
+[dependencies]
+serde = "*"
+serde_json = "0.7"
+openssl = "*"
+url = "*"
+quick-error = "*"
+env_logger = "*"
+log = "0.3"
+walkdir = "0.1"
+yaml-rust = "0.3.3"
+threadpool = "1.0"
+rust-crypto = "^0.2"
+regex = "0.1"
+
+[dependencies.postgres]
+version = "0.11"
+features = ["serde_json", "openssl"]

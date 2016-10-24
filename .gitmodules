@@ -1,0 +1,3 @@
+[submodule "src/gdcdictionary"]
+	path = src/gdcdictionary
+	url = https://github.com/NCI-GDC/gdcdictionary.git

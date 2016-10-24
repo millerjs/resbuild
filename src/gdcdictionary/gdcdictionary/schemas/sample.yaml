@@ -1,0 +1,303 @@
+$schema: "http://json-schema.org/draft-04/schema#"
+
+id: "sample"
+title: Sample
+type: object
+namespace: http://gdc.nci.nih.gov
+category: biospecimen
+program: '*'
+project: '*'
+description: >
+  Any material sample taken from a biological entity for testing,
+  diagnostic, propagation, treatment or research purposes, including a sample
+  obtained from a living organism or taken from the biological object after
+  halting of all its life functions. Biospecimen can contain one or more
+  components including but not limited to cellular molecules, cells, tissues,
+  organs, body fluids, embryos, and body excretory products.
+additionalProperties: false
+validators: null
+
+systemProperties:
+  - id
+  - project_id
+  - state
+  - created_datetime
+  - updated_datetime
+
+required:
+  - submitter_id
+  - sample_type
+  - sample_type_id
+  - cases
+
+uniqueKeys:
+  - [id]
+  - [project_id, submitter_id]
+
+links:
+  - name: cases
+    backref: samples
+    label: derived_from
+    target_type: case
+    multiplicity: many_to_one #not sure
+    required: true
+
+# Sample properties
+# Currently there are many TCGA-specific fields in the DB, this is an attempt
+# to minimize the core fields
+properties:
+  type:
+    type: string
+  id:
+    $ref: "_definitions.yaml#/UUID"
+    systemAlias: node_id
+  state:
+    $ref: "_definitions.yaml#/state"
+  submitter_id:
+    type:
+      - string
+      - "null"
+    description: >
+      The legacy barcode used before prior to the use UUIDs, varies by project.
+      For TCGA this is bcrsamplebarcode.
+  sample_type:
+    term:
+      $ref: "_terms.yaml#/sample_type"
+    type: string
+    enum:
+      - Additional Metastatic
+      - Additional - New Primary
+      - Blood Derived Cancer - Bone Marrow, Post-treatment
+      - Blood Derived Cancer - Peripheral Blood, Post-treatment
+      - Blood Derived Normal
+      - Bone Marrow Normal
+      - Buccal Cell Normal
+      - Cell Line Derived Xenograft Tissue
+      - Cell Lines
+      - Control Analyte
+      - DNA
+      - EBV Immortalized Normal
+      - FFPE Recurrent
+      - FFPE Scrolls
+      - Fibroblasts from Bone Marrow Normal
+      - GenomePlex (Rubicon) Amplified DNA
+      - Granulocytes
+      - Human Tumor Original Cells
+      - Metastatic
+      - Mononuclear Cells from Bone Marrow Normal
+      - Primary Blood Derived Cancer - Peripheral Blood
+      - Recurrent Blood Derived Cancer - Peripheral Blood
+      - Pleural Effusion
+      - Primary Blood Derived Cancer - Bone Marrow
+      - Primary Tumor
+      - Primary Xenograft Tissue
+      - Post neo-adjuvant therapy
+      - Recurrent Blood Derived Cancer - Bone Marrow
+      - Recurrent Tumor
+      - Repli-G (Qiagen) DNA
+      - Repli-G X (Qiagen) DNA
+      - RNA
+      - Slides
+      - Solid Tissue Normal
+      - Total RNA
+      - Xenograft Tissue
+  sample_type_id:
+    term:
+      $ref: "_terms.yaml#/sample_type_id"
+    type: string
+    enum:
+      - '01'
+      - '02'
+      - '03'
+      - '04'
+      - '05'
+      - '06'
+      - '07'
+      - '08'
+      - '09'
+      - '10'
+      - '11'
+      - '12'
+      - '13'
+      - '14'
+      - '15'
+      - '16'
+      - '20'
+      - '40'
+      - '41'
+      - '42'
+      - '50'
+      - '60'
+      - '61'
+      - '99'
+  tumor_code_id:
+    term:
+      $ref: "_terms.yaml#/tumor_code_id"
+    type: string
+    enum:
+      - "00"
+      - "01"
+      - "02"
+      - "03"
+      - "04"
+      - "10"
+      - "20"
+      - "21"
+      - "30"
+      - "40"
+      - "41"
+      - "50"
+      - "51"
+      - "52"
+      - "60"
+      - "61"
+      - "62"
+      - "63"
+      - "64"
+      - "65"
+      - "70"
+      - "71"
+      - "80"
+      - "81"
+  tumor_code:
+    term:
+      $ref: "_terms.yaml#/tumor_code"
+    type: string
+    enum:
+      - Non cancerous tissue
+      - Diffuse Large B-Cell Lymphoma (DLBCL)
+      - Lung Cancer (all types)
+      - Cervical Cancer (all types)
+      - Anal Cancer (all types)
+      - Acute lymphoblastic leukemia (ALL)
+      - Acute myeloid leukemia (AML)
+      - Induction Failure AML (AML-IF)
+      - Neuroblastoma (NBL)
+      - Osteosarcoma (OS)
+      - Ewing sarcoma
+      - Wilms tumor (WT)
+      - Clear cell sarcoma of the kidney (CCSK)
+      - Rhabdoid tumor (kidney) (RT)
+      - CNS, ependymoma
+      - CNS, glioblastoma (GBM)
+      - CNS, rhabdoid tumor
+      - CNS, low grade glioma (LGG)
+      - CNS, medulloblastoma
+      - CNS, other
+      - NHL, anaplastic large cell lymphoma
+      - NHL, Burkitt lymphoma (BL)
+      - Rhabdomyosarcoma
+      - Soft tissue sarcoma, non-rhabdomyosarcoma
+  tissue_type:
+    enum:
+      - Tumor
+      - Normal
+      - Abnormal
+      - Peritumoral
+    description: "A description of the tissue type with respect its tumor/normal source." # TOREVIEW
+  composition:
+    enum:
+      - Buccal Cells
+      - Buffy Coat
+      - Bone Marrow Components
+      - Bone Marrow Components NOS
+      - Control Analyte
+      - Cell
+      - Derived Cell Line
+      - EBV Immortalized
+      - Fibroblasts from Bone Marrow Normal
+      - Granulocytes
+      - Human Original Cells
+      - Lymphocytes
+      - Mononuclear Cells from Bone Marrow Normal
+      - Peripheral Blood Components NOS
+      - Pleural Effusion
+      - Plasma
+      - Peripheral Whole Blood
+      - Serum
+      - Saliva
+      - Sputum
+      - Solid Tissue
+      - Whole Bone Marrow
+    description: "Cellular composition of the sample." # TOREVIEW
+  tumor_descriptor:
+    enum:
+      - Metastatic
+      - Not Applicable
+      - Primary
+      - Recurrence
+      - Xenograft
+      - NOS
+    description: "A description of the tumor from which the sample was derived." # TOREVIEW
+  preservation_method:
+    enum:
+      - Cryopreserved
+      - FFPE
+      - Fresh
+      - OCT
+      - Snap Frozen
+      - Frozen
+    description: "Primary preservation method used to store the sample." # TOREVIEW
+  longest_dimension:
+    terms:
+      $ref: "_terms.yaml#/longest_dimension"
+    type: string
+  intermediate_dimension:
+    terms:
+      $ref: "_terms.yaml#/intermediate_dimension"
+    type: string
+  shortest_dimension:
+    term:
+      $ref: "_terms.yaml#/shortest_dimension"
+    type: string
+  initial_weight:
+    term:
+      $ref: "_terms.yaml#/initial_weight"
+    type: number
+  current_weight:
+    term:
+      $ref: "_terms.yaml#/current_weight"
+    type: number
+  freezing_method:
+    term:
+      $ref: "_terms.yaml#/freezing_method"
+    type: string
+  oct_embedded:
+    term:
+      $ref: "_terms.yaml#/oct_embedded"
+    type: string
+  time_between_clamping_and_freezing:
+    term:
+      $ref: "_terms.yaml#/time_between_clamping_and_freezing"
+    type: string
+  time_between_excision_and_freezing:
+    term:
+      $ref: "_terms.yaml#/time_between_excision_and_freezing"
+    type: string
+  days_to_collection:
+    term:
+      $ref: "_terms.yaml#/days_to_collection"
+    type: integer
+  days_to_sample_procurement:
+    term:
+      $ref: "_terms.yaml#/days_to_sample_procurement"
+    type: integer
+  pathology_report_uuid:
+    type: string
+    description: "UUID of the related pathology report." # are we still doing this? seems like the links handle this now
+  is_ffpe:
+    term:
+      $ref: "_terms.yaml#/is_ffpe"
+    type: boolean
+  cases:
+    #should this be to_one
+    $ref: "_definitions.yaml#/to_one"
+    description: >
+      Indicates that the sample is physically derived from the subject
+      of the linked to case via some process/protocol
+  project_id:
+    type: string
+  created_datetime:
+    $ref: "_definitions.yaml#/datetime"
+  updated_datetime:
+    $ref: "_definitions.yaml#/datetime"
