@@ -1,129 +1,252 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, BTreeMap};
 
 use ::types::*;
-use ::errors::EBResult;
-use walkdir::WalkDir;
-use std::io::prelude::*;
-use std::fs::File;
+use ::dictionary::SCHEMAS;
+use ::errors::{EBResult, EBError};
 use yaml_rust::{YamlLoader, Yaml};
 
 
-fn get_node_category(category: &str) -> NodeCategory
-{
-    match category {
-        "data_file" => NodeCategory::DataFile,
-        "biospecimen" => NodeCategory::Biospecimen,
-        "notation" => NodeCategory::Notation,
-        "administrative" => NodeCategory::Administrative,
-        "analysis" => NodeCategory::Analysis,
-        "clinical" => NodeCategory::Clinical,
-        "index_file" => NodeCategory::IndexFile,
-        "metadata_file" => NodeCategory::MetadataFile,
-        _ => NodeCategory::Other,
+impl<'a> From<&'a str> for NodeCategory {
+    fn from(category: &str)-> NodeCategory {
+        match category {
+            "data_file" => NodeCategory::DataFile,
+            "biospecimen" => NodeCategory::Biospecimen,
+            "notation" => NodeCategory::Notation,
+            "administrative" => NodeCategory::Administrative,
+            "analysis" => NodeCategory::Analysis,
+            "clinical" => NodeCategory::Clinical,
+            "index_file" => NodeCategory::IndexFile,
+            "metadata_file" => NodeCategory::MetadataFile,
+            _ => NodeCategory::Other,
+        }
     }
 }
 
 
-fn parse_node_type_from_schema(schema: &String) -> EBResult<NodeType>
-{
-    let yaml = &try!(YamlLoader::load_from_str(&*schema))[0];
-
-    let label = try!(yaml["id"].as_str().ok_or("id must be a string")).to_string();
-    let category_str = try!(yaml["id"].as_str().ok_or("category must be a string"));
-    let category = get_node_category(category_str);
-
-    let links = try!(parse_edge_types_from_schema(&label, schema));
-    let backrefs = links.iter().map(|ref link| EdgeType {
-        src_label: link.dst_label.clone(),
-        dst_label: link.src_label.clone(),
-        name: link.backref.clone(),
-        backref: link.name.clone(),
-        label: link.label.clone(),
-    }).collect();
-
-    Ok(NodeType {
-        label: label,
-        category: category,
-        links: links,
-        backrefs: backrefs,
-    })
+impl PropertyType {
+    fn parse(type_str: &str) -> EBResult<PropertyType> {
+        Ok(match &*type_str.to_lowercase() {
+            "bool" => PropertyType::Boolean,
+            "boolean" => PropertyType::Boolean,
+            "datetime" => PropertyType::String,
+            "enum" => PropertyType::String,
+            "float" => PropertyType::Decimal,
+            "integer" => PropertyType::Decimal,
+            "number" => PropertyType::Decimal,
+            "string" => PropertyType::String,
+            _ => return Err(format!("Unknown type: {}", type_str).into()),
+        })
+    }
 }
 
-
-fn parse_edge_type_from_yaml(src_label: &String, yaml: &Yaml) -> EBResult<EdgeType>
-{
-    let dst_label = try!(yaml["target_type"].as_str().ok_or(
-        format!("Link {:?} missing target", yaml)));
-    let backref = try!(yaml["backref"].as_str().ok_or(
-        format!("Link {:?} missing backref", yaml)));
-    let name = try!(yaml["name"].as_str().ok_or(
-        format!("Link {:?} missing name", yaml)));
-    let label = try!(yaml["label"].as_str().ok_or(
-        format!("Link {:?} missing label", yaml)));
-
-    Ok(EdgeType {
-        src_label: src_label.clone(),
-        dst_label: dst_label.to_string(),
-        backref: backref.to_string(),
-        name: name.to_string(),
-        label: label.to_string()
-    })
-}
-
-
-fn parse_edge_types_from_schema(src_label: &String, schema: &String) -> EBResult<Vec<EdgeType>>
-{
-    let yaml = &try!(YamlLoader::load_from_str(&*schema))[0];
-
-    if yaml["links"].is_badvalue() {
-        return Ok(vec![])
+impl SchemaNode {
+    fn new<S>(key: S) -> SchemaNode where S: Into<String> {
+        SchemaNode { key: key.into(), value: None, children: Vec::new() }
     }
 
-    let mut edges = Vec::new();
-    for entry in try!(yaml["links"].as_vec().ok_or("links must be a list")) {
-        if !entry["subgroup"].is_badvalue() {
-            for link in entry["subgroup"].as_vec().unwrap() {
-                edges.push(try!(parse_edge_type_from_yaml(src_label, link)))
+    fn get_kv(&self, key: &str) -> Option<String> {
+        self.get(key).and_then(|node| node.value.clone())
+    }
+
+    fn print(&self, level: u8) {
+        for _ in 0..level + 1 { print!("|--") }
+        println!(" {}: {:?}", self.key, self.value);
+        for child in &self.children {
+            child.print(level+1)
+        }
+    }
+
+    fn get<'a>(&'a self, key: &str) -> Option<&'a SchemaNode> {
+        self.children.iter().find(|child| child.key == key)
+    }
+
+    fn node_properties(&self, links: &Vec<EdgeType>) -> EBResult<HashMap<String, PropertyType>> {
+        let mut props = HashMap::new();
+        let props_node = try!(self.get("properties").ok_or("missing properties"));
+        let link_names = links.iter().map(|l| l.name.clone()).collect::<HashSet<_>>();
+        let prop_nodes = props_node.children.iter().filter(|node| !link_names.contains(&node.key));
+        for prop_node in prop_nodes {
+            let prop_type = prop_node.get("type")
+                .and_then(|n| n.value.clone())
+                .map(|type_str| PropertyType::parse(&*type_str))
+                .unwrap_or(Ok(PropertyType::String));
+            props.insert(prop_node.key.clone(), try!(prop_type));
+        }
+        Ok(props)
+    }
+
+    fn node_type(&self) -> EBResult<NodeType> {
+        let label = try!(self.get_kv("id").ok_or("missing label"));
+        let category_str = &*try!(self.get_kv("category").ok_or("missing category"));
+
+        let links = try!(self.edge_types(&label));
+        let backrefs = links.iter().map(|ref link| EdgeType {
+            src_label: link.dst_label.clone(),
+            dst_label: link.src_label.clone(),
+            name: link.backref.clone(),
+            backref: link.name.clone(),
+            label: link.label.clone(),
+        }).collect();
+
+        let properties = try!(self.node_properties(&links));
+
+        Ok(NodeType {
+            label: label,
+            props: properties,
+            category: category_str.into(),
+            links: links,
+            backrefs: backrefs,
+        })
+    }
+
+    fn edge_type(&self, src_label: &String) -> EBResult<EdgeType> {
+        let dst_label = try!(self.get_kv("target_type").ok_or(format!("{:?} missing target", self)));
+        let backref = try!(self.get_kv("backref").ok_or(format!("{:?} missing backref", self)));
+        let name = try!(self.get_kv("name").ok_or(format!("{:?} missing name", self)));
+        let label = try!(self.get_kv("label").ok_or(format!("{:?} missing label", self)));
+
+        Ok(EdgeType {
+            src_label: src_label.clone(),
+            dst_label: dst_label.to_string(),
+            backref: backref.to_string(),
+            name: name.to_string(),
+            label: label.to_string()
+        })
+    }
+
+    fn edge_types(&self, src_label: &String) -> EBResult<Vec<EdgeType>> {
+        if !self.get("links").is_some() {
+            return Ok(vec![])
+        }
+
+        let mut edges = Vec::new();
+        let links = try!(self.get("links").ok_or("links must be a list"));
+
+        for entry in &links.children {
+            if let Some(subgroup) = entry.get("subgroup") {
+                for link in &subgroup.children {
+                    edges.push(try!(link.edge_type(src_label)));
+                }
+            } else {
+                edges.push(try!(entry.edge_type(src_label)));
             }
-        } else {
-            edges.push(try!(parse_edge_type_from_yaml(src_label, entry)))
-        };
+        }
+
+        Ok(edges)
+    }
+}
+
+pub struct Resolver {
+    schemas: HashMap<String, Yaml>,
+}
+
+
+pub fn yaml_str<'a>(yaml: &'a Yaml, key: &str) -> EBResult<&'a str> {
+    match yaml[key].as_str() {
+        Some(key_str) => Ok(key_str),
+        None => return Err(EBError::BuildError(
+            format!("unable to parse key '{:}' to string in {:?}", key, yaml))),
+    }
+}
+
+
+pub fn load_yaml(source: &str) -> EBResult<Yaml> {
+    Ok(try!(YamlLoader::load_from_str(source))[0].clone())
+}
+
+
+impl Resolver {
+
+    fn new() -> EBResult<Resolver> {
+        let mut schemas = HashMap::new();
+        for schema in SCHEMAS.iter() {
+            let schema = try!(load_yaml(&*schema));
+            let label = try!(yaml_str(&schema, "id")).to_string();
+            schemas.insert(label, schema);
+        }
+        Ok(Resolver { schemas: schemas })
     }
 
-    Ok(edges)
+    fn dereference<'a>(&'a self, referrer: &'a Yaml, identifier: &str) -> EBResult<&'a Yaml> {
+        let parts = identifier.split("#/").collect::<Vec<&str>>();
+        let root = try!(parts.get(0).ok_or(format!("Unable to parse id from $ref {}", identifier)));
+        let path = try!(parts.get(1).ok_or(format!("Unable to parse path from $ref {}", identifier)));
+        let id = root.split(".").collect::<Vec<_>>()[0];
+        let schema = match id {
+            "" => referrer,
+            _ => try!(self.schemas.get(id).ok_or(format!("missing schema: {:?}", id))),
+        };
+        let resolution = &schema[*path];
+        Ok(resolution)
+    }
+
+    fn resolve_hash(&self, key: &str, hash: &BTreeMap<Yaml, Yaml>) -> EBResult<Vec<SchemaNode>> {
+        let mut nodes = Vec::new();
+        for (child_key, child_schema) in hash {
+            let child_key = try!(child_key.as_str().ok_or("unable to parse string"));
+
+            if "$ref" == child_key {
+                let child_value = try!(child_schema.as_str().ok_or("ref not a string"));
+                let deref = try!(self.dereference(child_schema, child_value));
+                let children = try!(self.resolve(key, deref)).children;
+                for child in children {
+                    nodes.push(child)
+                }
+
+            } else {
+                let child = try!(self.resolve(child_key, child_schema));
+                nodes.push(child);
+            }
+        }
+        Ok(nodes)
+    }
+
+    fn resolve(&self, key: &str, schema: &Yaml) -> EBResult<SchemaNode> {
+        let mut node = SchemaNode::new(key);
+
+        // If yaml is a hash
+        if let Some(hash) = schema.as_hash() {
+            for child in try!(self.resolve_hash(key, hash)) {
+                node.children.push(child)
+            }
+
+        // If yaml is a list
+        } else if let Some(vec) = schema.as_vec() {
+            for child_schema in vec {
+                node.children.push(try!(self.resolve(key, child_schema)));
+            }
+
+        // Otherwise just save the value
+        } else {
+            node.value = schema.as_str().map(|s| s.to_string())
+        }
+
+        Ok(node)
+    }
 }
 
 
 impl Datamodel {
-    pub fn new() -> Datamodel
-    {
-        Datamodel {
-            node_types: HashMap::new(),
-        }
-    }
+    pub fn new() -> EBResult<Datamodel> {
+        let mut node_types = HashMap::new();
+        let resolver = &try!(Resolver::new());
 
-    pub fn load_from_dictionary(mut self, root_path: &str) -> EBResult<Datamodel>
-    {
-        info!("Loading dictionary from {}", root_path);
+        for schema in SCHEMAS.iter() {
+            let yaml = try!(load_yaml(schema.as_ref()));
+            let id = try!(yaml_str(&yaml, "id"));
 
-        let entries = WalkDir::new(root_path).into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().file_name().is_some())
-            .filter(|e| e.path().file_name().unwrap().to_str().is_some())
-            .filter(|e| format!("{}", e.path().display()).ends_with(".yaml"))
-            .filter(|e| !format!("{}", e.path().display()).contains("metaschema.yaml"))
-            .filter(|e| !format!("{}", e.path().display()).contains("_terms.yaml"))
-            .filter(|e| !format!("{}", e.path().display()).contains("_definitions.yaml"));
+            if id.starts_with("_") {
+                debug!("Skipping schema {:?}", id);
+                continue
+            }
 
-        for entry in entries {
-            debug!("Loading schema {:?}", entry.path());
-            let mut file = try!(File::open(entry.path()));
-            let mut contents = String::new();
-            try!(file.read_to_string(&mut contents));
-            let node_type = try!(parse_node_type_from_schema(&contents));
-            self.node_types.insert(node_type.label.clone(), node_type);
+            let resolved = try!(resolver.resolve("root", &yaml));
+            let node_type = try!(resolved.node_type());
+
+            debug!("Loaded schema {}", node_type.label);
+            node_types.insert(node_type.label.clone(), node_type);
         }
 
-        Ok(self)
+        Ok(Datamodel { node_types: node_types })
     }
 }

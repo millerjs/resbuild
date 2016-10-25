@@ -46,10 +46,10 @@ impl CachedGraph {
     /// Adds the edge to the graph in both directions
     pub fn add_edge(&mut self, edge: Edge) -> EBResult<()>
     {
-        if ! self.nodes.contains_key(&edge.src_id) {
+        if !self.nodes.contains_key(&edge.src_id) {
             Err(format!("Source id {} not in graph", edge.src_id).into())
-        } else if ! self.nodes.contains_key(&edge.dst_id) {
-            Err(format!("Source id {} not in graph", edge.src_id).into())
+        } else if !self.nodes.contains_key(&edge.dst_id) {
+            Err(format!("Destination id {} not in graph", edge.dst_id).into())
         } else {
             // Create a src -> dst map if it doesn't exist
             if !self.graph.contains_key(&edge.src_id) {
@@ -117,7 +117,9 @@ impl CachedGraph {
 
     /// Loads all Node and Edge tables defined in the datamodel using the
     /// given Postgres connection
-    pub fn from_postgres(datamodel: &Datamodel, connection: &Connection) -> EBResult<CachedGraph>
+    #[allow(unused_variables)]
+    pub fn from_postgres(options: &CachingOptions, datamodel: &Datamodel, connection: &Connection)
+                         -> EBResult<CachedGraph>
     {
         let mut graph = CachedGraph::new();
 
@@ -131,25 +133,15 @@ impl CachedGraph {
         for (_, node_type) in &datamodel.node_types {
             for link in &node_type.links {
                 let edges = try!(load_edge_table(link, &connection));
-
-                let filtered_edges = edges.into_iter()
-                    .filter(|e| graph.nodes.contains_key(&e.src_id))
-                    .filter(|e| graph.nodes.contains_key(&e.dst_id))
-                    .collect::<Vec<_>>();
-
-                debug!("Filtered to {:} {:} edges", filtered_edges.len(), link.label);
-
-                for edge in filtered_edges.into_iter() {
+                for edge in edges {
                     try!(graph.add_edge(edge))
                 }
             }
         }
 
         info!("Loaded {} nodes from postgres", graph.nodes.len());
-
         Ok(graph)
     }
-
 }
 
 /// Returns a connection to Postgres if able to connect

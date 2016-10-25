@@ -32,3 +32,16 @@ macro_rules! doc {
         }
     };
 }
+
+
+/// Create a HashMap
+macro_rules! hash {
+    ( { $( $key:expr ; $val:expr ),* } ) => {
+        {
+            use std::collections::HashMap;
+            let mut temp_hash = Hash::new();
+            $( temp_hash.insert($key.into(), &$val); )*
+            temp_doc
+        }
+    };
+}

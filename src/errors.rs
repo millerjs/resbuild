@@ -10,7 +10,7 @@ quick_error! {
         PostgresError(err: postgres::error::Error) { from() }
         IoError(err: io::Error) { from() }
         YamlError(err: yaml_rust::ScanError) { from() }
-        Error { from(&'static str) }
+        Error(message: &'static str) { description(message) display("Error: {}", message) from() }
     }
 }
 

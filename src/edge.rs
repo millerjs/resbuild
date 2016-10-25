@@ -1,7 +1,16 @@
 use ::types::*;
-use crypto::md5::Md5;
 use crypto::digest::Digest;
+use crypto::md5::Md5;
+use std::fmt;
 use std::str;
+
+
+impl fmt::Display for Edge {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<{}({} -> {})>", self.label, self.src_id, self.dst_id)
+    }
+}
+
 
 fn prefix(s: String, k: usize) -> String {
     let idx = s.char_indices().nth(k).map(|(idx, _)| idx).unwrap_or(s.len());

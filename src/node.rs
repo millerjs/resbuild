@@ -1,5 +1,6 @@
 use std::fmt;
 use ::types::*;
+use serde_json::Value;
 
 
 impl Node {
@@ -18,33 +19,30 @@ impl Node {
     /// This is the basic document generator.  Take all the properties
     /// of a node and add it the the result.
     #[inline(always)]
-    pub fn get_base_doc_without_id(&self) -> Doc
+    pub fn get_base_doc_without_id(&self, options: &Options) -> Doc
     {
         let mut doc = Doc::new();
-
-        self.props.iter()
+        options.datamodel.node_types
+            .get(&self.label).unwrap().props.iter()
             .filter(|&(key, _)| !self.is_prop_hidden(&*key))
-            .map(|(key, val)| setitem!(doc, key, val))
+            .map(|(key, _)| setitem!(doc, key, *self.props.get(key).unwrap_or(&Value::Null)))
             .collect::<Vec<()>>();
-
         doc
     }
-
 
     /// Returns a boolean wether the given key should be included in
     /// the base doc for this node
     #[inline(always)]
     pub fn is_prop_hidden(&self, key: &str) -> bool
     {
-        (key != "project_id" || &*self.label == "project")
+        (key == "project_id" && &*self.label != "project")
     }
-
 
     #[inline(always)]
     /// The result doc will have *_id where * is the node type.
-    pub fn get_base_doc(&self) -> Doc
+    pub fn get_base_doc(&self, options: &Options) -> Doc
     {
-        let mut doc = self.get_base_doc_without_id();
+        let mut doc = self.get_base_doc_without_id(options);
 
         let id_key = match self.category() {
             NodeCategory::Analysis => "analysis_id".into(),

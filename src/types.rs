@@ -29,8 +29,24 @@ pub enum NodeCategory {
 }
 
 #[derive(Debug)]
+pub enum PropertyType {
+    Integer,
+    Decimal,
+    String,
+    Boolean,
+}
+
+#[derive(Debug)]
+pub struct SchemaNode {
+    pub key: String,
+    pub value: Option<String>,
+    pub children: Vec<SchemaNode>,
+}
+
+#[derive(Debug)]
 pub struct NodeType {
     pub label: String,
+    pub props: HashMap<String, PropertyType>,
     pub category: NodeCategory,
     pub links: Vec<EdgeType>,
     pub backrefs: Vec<EdgeType>,
@@ -69,6 +85,22 @@ pub struct CachingOptions {
     pub index_file_extensions: Vec<String>,
     pub possible_associated_entites: Vec<String>,
     pub supplement_regexes: Vec<Regex>,
+}
+
+#[derive(Debug)]
+pub enum IndexType {
+    Active,
+    Legacy,
+}
+
+#[derive(Debug)]
+pub struct Options {
+    pub datamodel: Datamodel,
+    pub case_to_file_paths: Vec<Vec<String>>,
+    pub file_labels: Vec<String>,
+    pub index_file_extensions: Vec<String>,
+    pub possible_associated_entites: Vec<String>,
+    pub index_type: IndexType,
 }
 
 #[derive(Debug)]
