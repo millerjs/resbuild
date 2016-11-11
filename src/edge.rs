@@ -1,8 +1,23 @@
-use ::types::*;
 use crypto::digest::Digest;
 use crypto::md5::Md5;
-use std::fmt;
-use std::str;
+use std::{fmt, str};
+
+
+#[derive(Debug,Clone)]
+pub struct Edge {
+    pub src_id: String,
+    pub dst_id: String,
+    pub label: String,
+}
+
+#[derive(Debug)]
+pub struct EdgeType {
+    pub name: String,
+    pub label: String,
+    pub backref: String,
+    pub src_label: String,
+    pub dst_label: String,
+}
 
 
 impl fmt::Display for Edge {

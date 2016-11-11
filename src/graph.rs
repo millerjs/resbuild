@@ -1,12 +1,28 @@
+use ::errors::*;
+use ::edge::{Edge, EdgeType};
+use ::node::{Node, NodeType};
+use ::types::Doc;
+use ::datamodel::Datamodel;
 use openssl;
 use postgres::error::ConnectError;
 use postgres::{Connection, SslMode};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Display;
+use regex::Regex;
 
-use ::types::*;
-use ::errors::*;
+#[derive(Debug)]
+pub struct CachingOptions {
+    pub case_to_file_paths: Vec<Vec<String>>,
+    pub redacted_but_not_suppressed: Vec<String>,
+    pub differentiated_edges: Vec<(String, String, String)>,
+    pub file_labels: Vec<String>,
+    pub unindexed_by_property: HashMap<String, Vec<Doc>>,
+    pub omitted_projects: Vec<String>,
+    pub index_file_extensions: Vec<String>,
+    pub possible_associated_entites: Vec<String>,
+    pub supplement_regexes: Vec<Regex>,
+}
 
 
 #[derive(Debug)]
@@ -124,7 +140,7 @@ impl CachedGraph {
         let mut graph = CachedGraph::new();
 
         for (_, node_type) in &datamodel.node_types {
-            let nodes: Vec<Node> = try!(load_node_table(node_type, &connection));
+            let nodes: Vec<Node> = load_node_table(node_type, &connection)?;
             for node in nodes {
                 graph.add_node(node);
             }
@@ -132,9 +148,9 @@ impl CachedGraph {
 
         for (_, node_type) in &datamodel.node_types {
             for link in &node_type.links {
-                let edges = try!(load_edge_table(link, &connection));
+                let edges = load_edge_table(link, &connection)?;
                 for edge in edges {
-                    try!(graph.add_edge(edge))
+                    graph.add_edge(edge)?;
                 }
             }
         }
@@ -162,7 +178,7 @@ pub fn load_node_table(node_type: &NodeType, connection: &Connection) -> EBResul
     debug!("Loading node type: {}", label);
     let tablename = node_type.get_tablename();
     let statement = format!("SELECT node_id, _props, _sysan, acl FROM {}", tablename);
-    let rows = try!(connection.query(&*statement, &[]));
+    let rows = connection.query(&*statement, &[])?;
 
     debug!("Loaded {} {} nodes", rows.len(), label);
     let mut nodes = Vec::with_capacity(rows.len());
@@ -171,8 +187,8 @@ pub fn load_node_table(node_type: &NodeType, connection: &Connection) -> EBResul
         let id: String = row.get(0);
         let props: Value = row.get(1);
         let sysan: Value = row.get(2);
-        let props = try!(props.as_object().ok_or("Props must be an object"));
-        let sysan = try!(sysan.as_object().ok_or("Sysan must be an object"));
+        let props = props.as_object().ok_or("Props must be an object")?;
+        let sysan = sysan.as_object().ok_or("Sysan must be an object")?;
         let acl = row.get(3);
         let node = Node::new(label.clone(), id.clone(), props.clone(), sysan.clone(), acl);
         nodes.push(node);
@@ -192,7 +208,7 @@ pub fn load_edge_table(edge_type: &EdgeType, connection: &Connection) -> EBResul
 
     let tablename = edge_type.get_tablename();
     let statement = format!("SELECT src_id, dst_id FROM {}", tablename);
-    let rows = try!(connection.query(&*statement, &[]));
+    let rows = connection.query(&*statement, &[])?;
 
     debug!("Loaded {} {} edges", rows.len(), label);
     let mut edges = Vec::with_capacity(rows.len());

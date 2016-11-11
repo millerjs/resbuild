@@ -12,10 +12,12 @@ extern crate env_logger;
 extern crate threadpool;
 extern crate scoped_pool;
 
-use esbuild::common::{case_type_tree, denormalize_tree};
+
+use esbuild::builders::legacy::LegacyBuilder;
+use esbuild::builders::common::{case_type_tree, Builder, Options, NodeTree};
 use esbuild::errors::EBResult;
-use esbuild::graph::{connect, CachedGraph};
-use esbuild::types::{Datamodel, CachingOptions, Options, NodeTree};
+use esbuild::graph::{connect, CachingOptions, CachedGraph};
+use esbuild::datamodel::Datamodel;
 use postgres::Connection;
 use scoped_pool::Pool;
 use std::env;
@@ -29,7 +31,7 @@ fn env_psql() -> EBResult<Connection> {
     let user = env::var("PG_USER").unwrap_or(env::var("USER").unwrap_or("postgres".to_string()));
     let password = env::var("PG_PASSWORD").unwrap_or("".to_string());
 
-    Ok(try!(connect(host, database, user, password)))
+    Ok(connect(host, database, user, password)?)
 }
 
 
@@ -47,8 +49,9 @@ fn denormalize(graph: &CachedGraph, options: &Options) ->EBResult<()> {
             let tx = tx.clone();
             scope.execute(move || {
                 debug!("Denormalizing {:}", case);
+                let builder = LegacyBuilder::new(options, graph);
                 let case_tree = &NodeTree::construct(graph, case_type_tree, case);
-                let doc = denormalize_tree(options, graph, case_tree);
+                let doc = builder.denormalize_tree(case_tree);
                 tx.send(doc).unwrap();
             })
         }
@@ -57,8 +60,9 @@ fn denormalize(graph: &CachedGraph, options: &Options) ->EBResult<()> {
     debug!("Collecting cases");
     let case_docs = rx.iter().take(n_cases).collect::<Vec<_>>();
     for case_doc in case_docs {
-        println!("{:?}", case_doc);
+        println!("{:?}", case_doc)
     }
+    debug!("Done.");
 
     Ok(())
 }
@@ -67,15 +71,15 @@ fn denormalize(graph: &CachedGraph, options: &Options) ->EBResult<()> {
 /// Build the legacy index
 fn build_legacy_index() -> EBResult<()> {
     // Construct datamode from included resources
-    let mut datamodel = try!(Datamodel::new());
+    let mut datamodel = Datamodel::new()?;
 
     // Cache the graph
-    let connection = try!(env_psql());
+    let connection = env_psql()?;
     let caching_options = &CachingOptions::new();
-    let graph = &try!(CachedGraph::from_postgres(caching_options, &datamodel, &connection));
+    let graph = &CachedGraph::from_postgres(caching_options, &datamodel, &connection)?;
     let options = &Options::legacy_defaults(datamodel);
 
-    try!(denormalize(graph, options));
+    denormalize(graph, options)?;
 
     Ok(())
 }

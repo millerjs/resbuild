@@ -72,6 +72,5 @@ pub mod types;
 pub mod datamodel;
 pub mod dictionary;
 
-pub mod common;
-pub mod legacy;
-// pub mod active;
+// Builders
+pub mod builders;
