@@ -33,12 +33,13 @@ pub struct CachingOptions {
     pub supplement_regexes: Vec<Regex>,
 }
 
+
 /// CachedGraph is an in memory representation of the GDC graph as
 /// represented by a hash (id->Node) and a `graph` hash
 /// (src_id->dst_ids->Edge).
 #[derive(Debug)]
 pub struct CachedGraph {
-    pub graph: HashMap<String, HashMap<String, Edge>>,
+    pub graph: HashMap<String, HashMap<String, Vec<Edge>>>,
     pub nodes: HashMap<String, Node>
 }
 
@@ -94,8 +95,10 @@ impl CachedGraph {
             }
 
             // Add the edge in both directions
-            self.graph.get_mut(&edge.src_id).unwrap().insert(edge.dst_id.clone(), edge.clone());
-            self.graph.get_mut(&edge.dst_id).unwrap().insert(edge.src_id.clone(), edge);
+            self.graph.get_mut(&edge.src_id).unwrap()
+                .get_mut(&edge.dst_id).unwrap_or(&mut Vec::new()).push(edge.clone());
+            self.graph.get_mut(&edge.dst_id).unwrap()
+                .get_mut(&edge.src_id).unwrap_or(&mut Vec::new()).push(edge.clone());
 
             Ok(())
         }
@@ -145,7 +148,7 @@ impl CachedGraph {
 
     /// Returns a reference to any edge between given nodes
     /// (agnostic of directionality)
-    pub fn get_edge<'a>(&'a self, src_id: &String, dst_id: &String) -> Option<&'a Edge>
+    pub fn get_edges<'a>(&'a self, src_id: &String, dst_id: &String) -> Option<&Vec<Edge>>
     {
         self.graph.get(src_id).map_or(None, |r| r.get(dst_id))
     }
