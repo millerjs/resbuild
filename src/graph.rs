@@ -1,3 +1,8 @@
+//! Graph
+//!
+//! This module provides the ability to cache the GDC graph model in
+//! memory.
+
 use ::errors::*;
 use ::edge::{Edge, EdgeType};
 use ::node::{Node, NodeType};
@@ -11,6 +16,10 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use regex::Regex;
 
+
+/// CachingOptions contains the specifics of what to load from the
+/// graph, what to drop, and what to specifically cache
+/// (e.g. relationships).
 #[derive(Debug)]
 pub struct CachingOptions {
     pub case_to_file_paths: Vec<Vec<String>>,
@@ -24,7 +33,9 @@ pub struct CachingOptions {
     pub supplement_regexes: Vec<Regex>,
 }
 
-
+/// CachedGraph is an in memory representation of the GDC graph as
+/// represented by a hash (id->Node) and a `graph` hash
+/// (src_id->dst_ids->Edge).
 #[derive(Debug)]
 pub struct CachedGraph {
     pub graph: HashMap<String, HashMap<String, Edge>>,
@@ -33,6 +44,7 @@ pub struct CachedGraph {
 
 
 impl CachingOptions {
+    /// Creates a new CachingOption with defaults (mostly empty) settings
     pub fn new() -> CachingOptions {
         CachingOptions {
             case_to_file_paths: Vec::new(),
@@ -50,7 +62,8 @@ impl CachingOptions {
 
 
 impl CachedGraph {
-
+    /// Creates a new empty CachedGraph.  To create one by importing
+    /// from postgres, prefer `CachedGraph::from_postgres(...)`
     pub fn new() -> CachedGraph
     {
         CachedGraph {
@@ -59,7 +72,10 @@ impl CachedGraph {
         }
     }
 
-    /// Adds the edge to the graph in both directions
+    /// Adds the edge to the graph in both directions. This is for
+    /// ease of lookup later.  If we only cached in one direction,
+    /// then we would have to do up to two lookups from the graph to
+    /// find an edge.
     pub fn add_edge(&mut self, edge: Edge) -> EBResult<()>
     {
         if !self.nodes.contains_key(&edge.src_id) {
@@ -85,11 +101,13 @@ impl CachedGraph {
         }
     }
 
+    /// Returns a reference to a node given it's id
     pub fn get_node<'a>(&'a self, id: &String) -> Option<&'a Node>
     {
         self.nodes.get(id)
     }
 
+    /// Returns a vector of all node references with a given label
     pub fn nodes_labeled<'a, S>(&'a self, label: S) -> Vec<&'a Node>
         where S: Into<String>
     {
@@ -97,6 +115,8 @@ impl CachedGraph {
         self.nodes.values().filter(|node| node.label == label).collect()
     }
 
+    /// Returns a vec of node references that are adjacent to the node
+    /// with the given `id`
     pub fn neighbors<'a>(&'a self, id: &String) -> Vec<&'a Node>
     {
         // edges should be bidirectional, just pick one direction
@@ -108,6 +128,8 @@ impl CachedGraph {
         }
     }
 
+    /// Returns a vec of node references that are adjacent to the node
+    /// with the given `id` and have a given `label`
     pub fn neighbors_labeled<'a>(&'a self, id: &String, label: &String) -> Vec<&'a Node>
     {
         // edges should be bidirectional, just pick one direction
@@ -121,11 +143,14 @@ impl CachedGraph {
         }
     }
 
+    /// Returns a reference to any edge between given nodes
+    /// (agnostic of directionality)
     pub fn get_edge<'a>(&'a self, src_id: &String, dst_id: &String) -> Option<&'a Edge>
     {
         self.graph.get(src_id).map_or(None, |r| r.get(dst_id))
     }
 
+    /// Idempotently add a node to the map of nodes
     pub fn add_node(&mut self, node: Node)
     {
         self.nodes.insert(node.id.clone(), node);
@@ -139,6 +164,7 @@ impl CachedGraph {
     {
         let mut graph = CachedGraph::new();
 
+        // Load all nodes first
         for (_, node_type) in &datamodel.node_types {
             let nodes: Vec<Node> = load_node_table(node_type, &connection)?;
             for node in nodes {
@@ -146,6 +172,7 @@ impl CachedGraph {
             }
         }
 
+        // Load all edges to point to already loaded nodes
         for (_, node_type) in &datamodel.node_types {
             for link in &node_type.links {
                 let edges = load_edge_table(link, &connection)?;
@@ -183,7 +210,7 @@ pub fn load_node_table(node_type: &NodeType, connection: &Connection) -> EBResul
     debug!("Loaded {} {} nodes", rows.len(), label);
     let mut nodes = Vec::with_capacity(rows.len());
 
-    for row in rows.iter() {
+    for row in &rows {
         let id: String = row.get(0);
         let props: Value = row.get(1);
         let sysan: Value = row.get(2);
@@ -213,7 +240,7 @@ pub fn load_edge_table(edge_type: &EdgeType, connection: &Connection) -> EBResul
     debug!("Loaded {} {} edges", rows.len(), label);
     let mut edges = Vec::with_capacity(rows.len());
 
-    for row in rows.iter() {
+    for row in &rows {
         let src_id: String = row.get(0);
         let dst_id: String = row.get(1);
         let edge = Edge::new(label.clone(), src_id, dst_id);
