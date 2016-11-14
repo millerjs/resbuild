@@ -77,7 +77,6 @@ pub trait Builder {
     #[inline(always)]
     /// The result doc will have *_id where * is the node type.
     fn get_base_doc(&self, node: &Node) -> Doc {
-
         let id_key = match node.category() {
             NodeCategory::Analysis => "analysis_id".into(),
             _ => format!("{}_id", node.label),
@@ -119,18 +118,6 @@ impl<'a> NodeTree<'a> {
         }
     }
 
-    fn _print(&self, level: u8) {
-        for _ in 0..level + 1 { print!("|--") }
-        println!(" {}", self.node);
-        for child in &self.children {
-            child._print(level+1)
-        }
-    }
-
-    fn print(&self) {
-        self._print(0)
-    }
-
     pub fn child(mut self, child: NodeTree<'a>) -> NodeTree {
         self.children.push(child);
         self
@@ -155,6 +142,7 @@ impl<'a> NodeTree<'a> {
         nodes
     }
 }
+
 
 pub fn sample_type_tree() -> TypeTree {
     TypeTree::new("sample", "samples", Correlation::ToMany)
