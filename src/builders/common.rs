@@ -5,6 +5,9 @@ use ::types::Doc;
 
 use serde_json::Value;
 
+// ======================================================================
+// Types
+
 #[derive(Debug,Clone)]
 pub enum Correlation {
     ToOne,
@@ -20,7 +23,16 @@ pub struct Options {
     pub possible_associated_entites: Vec<String>,
 }
 
-
+/// A type tree is a tree structure containing the entities to
+/// traverse in the graph at the type level, e.g. a case tree
+///
+/// case
+///  |___ sample
+///  |      |___ portion
+///  |              |___ analyte
+///  |                      ...
+///  |___ annotation
+///
 #[derive(Debug)]
 pub struct TypeTree {
     pub label: String,
@@ -30,6 +42,21 @@ pub struct TypeTree {
 }
 
 
+/// A node tree is a tree structure containing the entities at the
+/// node instance level produced by traversing a TypeTree in the
+/// graph, e.g. a case tree
+///
+/// case1
+///  |___ sample1
+///  |      |___ portion1
+///  |              |___ analyte1
+///  |                      ...
+///  |___ sample2
+///  |      |___ portion2
+///  |              |___ analyte2
+///  |                      ...
+///  |___ annotation1
+///
 #[derive(Debug)]
 pub struct NodeTree<'a> {
     pub node: &'a Node,
@@ -39,10 +66,15 @@ pub struct NodeTree<'a> {
 }
 
 
+// ======================================================================
+// Implementations
+
 pub trait Builder {
     fn options<'a>(&'a self) -> &'a Options;
     fn graph<'a>(&'a self) -> &'a CachedGraph;
 
+    /// Produce a base document from a given NodeTree (that was
+    /// probably produced from a TypeTree)
     fn denormalize_tree(&self, tree: &NodeTree) -> Doc {
         let mut doc = self.get_base_doc(tree.node);
         for child in &tree.children {
@@ -57,8 +89,10 @@ pub trait Builder {
     #[inline(always)]
     fn get_base_doc_without_id(&self, node: &Node) -> Doc {
         let mut doc = Doc::new();
+
         let props = self.options().datamodel.node_types
-            .get(&node.label).unwrap().props.iter()
+            .get(&node.label).unwrap()
+            .props.iter()
             .filter(|&(key, _)| !self.is_prop_hidden(node, &*key));
 
         for (key, _) in props {
@@ -71,11 +105,11 @@ pub trait Builder {
     /// the base doc for this node
     #[inline(always)]
     fn is_prop_hidden(&self, node: &Node, key: &str) -> bool {
-        (key == "project_id" && &*node.label != "project")
+        key == "project_id" && &*node.label != "project"
     }
 
-    #[inline(always)]
     /// The result doc will have *_id where * is the node type.
+    #[inline(always)]
     fn get_base_doc(&self, node: &Node) -> Doc {
         let id_key = match node.category() {
             NodeCategory::Analysis => "analysis_id".into(),

@@ -33,7 +33,6 @@ pub struct CachingOptions {
     pub supplement_regexes: Vec<Regex>,
 }
 
-
 /// CachedGraph is an in memory representation of the GDC graph as
 /// represented by a hash (id->Node) and a `graph` hash
 /// (src_id->dst_ids->Edge).
