@@ -32,17 +32,15 @@ macro_rules! pyobj {
 
 
 /// try!() alternative that coerces Into<EBError> into PyErr
-macro_rules! extract_json_scalar {
-    ($py:expr, $val:expr) => {
-        match *$val {
-            Value::Null => $py.None(),
-            Value::Bool(ref val) => pyobj!($py, val),
-            Value::I64(ref val) => pyobj!($py, val),
-            Value::U64(ref val) => pyobj!($py, val),
-            Value::F64(ref val) => pyobj!($py, val),
-            Value::String(ref val) => pyobj!($py, val),
-            _ => RustEBError::new($py, format!("Unknown type: {:?}", $val)).instance($py),
-        }
+fn extract_json_scalar(py: Python, val: &Value) -> PythonObject{
+    match *val {
+        Value::Null => py.None(),
+        Value::Bool(ref val) => pyobj!(py, val),
+        Value::I64(ref val) => pyobj!(py, val),
+        Value::U64(ref val) => pyobj!(py, val),
+        Value::F64(ref val) => pyobj!(py, val),
+        Value::String(ref val) => pyobj!(py, val),
+        _ => RustEBError::new(py, format!("Unknown type: {:?}", val)).instance(py),
     }
 }
 
@@ -102,7 +100,6 @@ py_class!(class RustCachedGraph |py| {
     def neighbors_labeled(&self, id: String, label: String) -> PyResult<Vec<RustNode>> {
         self.graph(py).neighbors_labeled(&id, &label).iter().map(|n| n.to_py(py)).collect()
     }
-
 });
 
 
@@ -113,11 +110,15 @@ py_class!(class RustNode |py| {
         Ok(self.data(py).to_string())
     }
 
+    def label(&self) -> PyResult<String> {
+        Ok(self.data(py).label.clone())
+    }
+
     def props(&self) -> PyResult<PyDict> {
         let dict = PyDict::new(py);
         let node = self.data(py);
         for (key, val) in &node.props {
-            dict.set_item(py, key, extract_json_scalar!(py, val))?;
+            dict.set_item(py, key, extract_json_scalar(py, val))?;
         }
         Ok(dict)
     }
@@ -126,7 +127,7 @@ py_class!(class RustNode |py| {
         let dict = PyDict::new(py);
         let node = self.data(py);
         for (key, val) in &node.sysan {
-            dict.set_item(py, key, extract_json_scalar!(py, val))?;
+            dict.set_item(py, key, extract_json_scalar(py, val))?;
         }
         Ok(dict)
     }
