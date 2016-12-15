@@ -66,6 +66,12 @@ impl Node {
 }
 
 
+/// Map a Vec<Node> to python list representation
+fn map_rustnode(py: Python, nodes: &Vec<&Node>) -> PyResult<Vec<RustNode>> {
+    nodes.iter().map(|n| n.to_py(py)).collect()
+}
+
+
 py_class!(class RustCachedGraph |py| {
     data graph: CachedGraph;
 
@@ -94,11 +100,15 @@ py_class!(class RustCachedGraph |py| {
     }
 
     def neighbors(&self, id: String) -> PyResult<Vec<RustNode>> {
-        self.graph(py).neighbors(&id).iter().map(|n| n.to_py(py)).collect()
+        map_rustnode(py, &self.graph(py).neighbors(&id))
     }
 
     def neighbors_labeled(&self, id: String, label: String) -> PyResult<Vec<RustNode>> {
-        self.graph(py).neighbors_labeled(&id, &label).iter().map(|n| n.to_py(py)).collect()
+        map_rustnode(py, &self.graph(py).neighbors_labeled(&id, &label))
+    }
+
+    def nodes_labeled(&self, labels: Vec<String>) -> PyResult<Vec<RustNode>> {
+        map_rustnode(py, &self.graph(py).nodes_labeled(labels))
     }
 });
 

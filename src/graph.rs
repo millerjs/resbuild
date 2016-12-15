@@ -12,7 +12,7 @@ use openssl;
 use postgres::error::ConnectError;
 use postgres::{Connection, SslMode};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 use std::fmt::Display;
 use regex::Regex;
 
@@ -119,11 +119,13 @@ impl CachedGraph {
     }
 
     /// Returns a vector of all node references with a given label
-    pub fn nodes_labeled<'a, S>(&'a self, label: S) -> Vec<&'a Node>
-        where S: Into<String>
+    pub fn nodes_labeled<'a>(&'a self, labels_: Vec<String>) -> Vec<&'a Node>
     {
-        let label: String = label.into();
-        self.nodes.values().filter(|node| node.label == label).collect()
+        let mut labels = HashSet::new();
+        for label in labels_ {
+            labels.insert(label);
+        }
+        self.nodes.values().filter(|node| labels.contains(&node.label)).collect()
     }
 
     /// Returns a vec of node references that are adjacent to the node
