@@ -93,11 +93,20 @@ impl CachedGraph {
                 self.graph.insert(edge.dst_id.clone(), HashMap::new());
             }
 
-            // Add the edge in both directions
-            self.graph.get_mut(&edge.src_id).unwrap()
-                .get_mut(&edge.dst_id).unwrap_or(&mut Vec::new()).push(edge.clone());
-            self.graph.get_mut(&edge.dst_id).unwrap()
-                .get_mut(&edge.src_id).unwrap_or(&mut Vec::new()).push(edge.clone());
+            // Create a src -> dst edge list if it doesn't exist
+            if !self.graph.get(&edge.src_id).unwrap().contains_key(&edge.dst_id) {
+                self.graph.get_mut(&edge.src_id).unwrap().insert(edge.dst_id.clone(), vec![]);
+            }
+
+            // Create a dst -> src edge list if it doesn't exist
+            if !self.graph.get(&edge.dst_id).unwrap().contains_key(&edge.src_id) {
+                self.graph.get_mut(&edge.dst_id).unwrap().insert(edge.src_id.clone(), vec![]);
+            }
+
+            self.graph.get_mut(&edge.src_id).unwrap().get_mut(&edge.dst_id).unwrap()
+                .push(edge.clone());
+            self.graph.get_mut(&edge.dst_id).unwrap().get_mut(&edge.src_id).unwrap()
+                .push(edge.clone());
 
             Ok(())
         }
@@ -126,7 +135,7 @@ impl CachedGraph {
             Some(map) => {
                 map.iter().map(|(dst, _)| self.get_node(dst).unwrap()).collect()
             },
-            None => Vec::new(),
+            None => { println!("no edges"); Vec::new()},
         }
     }
 

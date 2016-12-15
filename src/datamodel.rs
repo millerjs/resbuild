@@ -127,6 +127,7 @@ impl SchemaNode {
         let category_str = &*self.get_kv("category").ok_or("missing category")?;
 
         let links = self.edge_types(&label)?;
+
         let backrefs = links.iter().map(|ref link| EdgeType {
             src_label: link.dst_label.clone(),
             dst_label: link.src_label.clone(),

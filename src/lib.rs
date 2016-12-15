@@ -60,6 +60,7 @@ extern crate threadpool;
 extern crate walkdir;
 extern crate yaml_rust;
 extern crate crypto;
+extern crate env_logger;
 
 #[macro_use]
 pub mod macros;

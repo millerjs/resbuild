@@ -2,7 +2,9 @@ use ::errors::EBError;
 use ::graph::{connect, CachingOptions, CachedGraph};
 use ::datamodel::Datamodel;
 use ::node::Node;
-use cpython::{PyErr, Python, PyResult, PyDict};
+use serde_json::Value;
+use cpython::{PyErr, Python, PyResult, PyDict, PythonObject, ToPyObject};
+use env_logger;
 
 /// Create custom Python Exception
 py_exception!(resbuild, RustEBError);
@@ -22,6 +24,29 @@ macro_rules! pytry {
     ($py:expr, $e:expr) => ($e.map_err(|e| EBError::from(e).to_pyerr($py))?);
 }
 
+
+/// try!() alternative that coerces Into<EBError> into PyErr
+macro_rules! pyobj {
+    ($py:expr, $val:expr) => ($val.to_py_object($py).into_object());
+}
+
+
+/// try!() alternative that coerces Into<EBError> into PyErr
+macro_rules! extract_json_scalar {
+    ($py:expr, $val:expr) => {
+        match *$val {
+            Value::Null => $py.None(),
+            Value::Bool(ref val) => pyobj!($py, val),
+            Value::I64(ref val) => pyobj!($py, val),
+            Value::U64(ref val) => pyobj!($py, val),
+            Value::F64(ref val) => pyobj!($py, val),
+            Value::String(ref val) => pyobj!($py, val),
+            _ => RustEBError::new($py, format!("Unknown type: {:?}", $val)).instance($py),
+        }
+    }
+}
+
+
 /// Create our extension module
 py_module_initializer!(
     resbuild,
@@ -30,26 +55,80 @@ py_module_initializer!(
     {
         try!(m.add(py, "__doc__", "GDC Datamodel features in rust."));
         try!(m.add_class::<RustCachedGraph>(py));
+        try!(m.add_class::<RustNode>(py));
         Ok(())
     }
 );
+
+
+impl Node {
+    fn to_py(&self, py: Python) -> PyResult<RustNode> {
+        RustNode::create_instance(py, self.clone())
+    }
+}
+
 
 py_class!(class RustCachedGraph |py| {
     data graph: CachedGraph;
 
     def __new__(_cls, schemas: Vec<String>,
-                host: String, database: String, user: String, password: String)
+                host: &str, database: &str, user: &str, password: &str)
                 -> PyResult<RustCachedGraph>
     {
+        env_logger::init().unwrap();
+
         let caching_options = &CachingOptions::new();
         let datamodel = pytry!(py, Datamodel::new(&schemas));
         let connection = pytry!(py, connect(host, database, user, password));
         let graph = pytry!(py, CachedGraph::from_postgres(
             caching_options, &datamodel, &connection));
+
         RustCachedGraph::create_instance(py, graph)
     }
 
     def node_count(&self) -> PyResult<usize> {
         Ok(self.graph(py).nodes.len())
     }
+
+    def get_node(&self, id: String) -> PyResult<RustNode> {
+        pytry!(py, self.graph(py).get_node(&id).map(|n| n.to_py(py))
+               .ok_or(format!("Node '{}' not found", id)))
+    }
+
+    def neighbors(&self, id: String) -> PyResult<Vec<RustNode>> {
+        self.graph(py).neighbors(&id).iter().map(|n| n.to_py(py)).collect()
+    }
+
+    def neighbors_labeled(&self, id: String, label: String) -> PyResult<Vec<RustNode>> {
+        self.graph(py).neighbors_labeled(&id, &label).iter().map(|n| n.to_py(py)).collect()
+    }
+
+});
+
+
+py_class!(class RustNode |py| {
+    data data: Node;
+
+    def __repr__(&self) -> PyResult<String> {
+        Ok(self.data(py).to_string())
+    }
+
+    def props(&self) -> PyResult<PyDict> {
+        let dict = PyDict::new(py);
+        let node = self.data(py);
+        for (key, val) in &node.props {
+            dict.set_item(py, key, extract_json_scalar!(py, val))?;
+        }
+        Ok(dict)
+    }
+
+    def sysan(&self) -> PyResult<PyDict> {
+        let dict = PyDict::new(py);
+        let node = self.data(py);
+        for (key, val) in &node.sysan {
+            dict.set_item(py, key, extract_json_scalar!(py, val))?;
+        }
+        Ok(dict)
+    }
+
 });
