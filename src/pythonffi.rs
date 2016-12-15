@@ -1,10 +1,12 @@
 use ::errors::EBError;
 use ::graph::{connect, CachingOptions, CachedGraph};
 use ::datamodel::Datamodel;
+use ::node::Node;
 use cpython::{PyErr, Python, PyResult, PyDict};
 
 /// Create custom Python Exception
 py_exception!(resbuild, RustEBError);
+
 
 impl EBError {
     /// Convert EBError to PyErr (can't impl Into because we require
@@ -13,6 +15,7 @@ impl EBError {
         RustEBError::new(py, format!("{:?}", self))
     }
 }
+
 
 /// try!() alternative that coerces Into<EBError> into PyErr
 macro_rules! pytry {
@@ -34,11 +37,12 @@ py_module_initializer!(
 py_class!(class RustCachedGraph |py| {
     data graph: CachedGraph;
 
-    def __new__(_cls, host: String, database: String, user: String, password: String)
+    def __new__(_cls, schemas: Vec<String>,
+                host: String, database: String, user: String, password: String)
                 -> PyResult<RustCachedGraph>
     {
         let caching_options = &CachingOptions::new();
-        let datamodel = pytry!(py, Datamodel::new());
+        let datamodel = pytry!(py, Datamodel::new(&schemas));
         let connection = pytry!(py, connect(host, database, user, password));
         let graph = pytry!(py, CachedGraph::from_postgres(
             caching_options, &datamodel, &connection));
@@ -47,14 +51,5 @@ py_class!(class RustCachedGraph |py| {
 
     def node_count(&self) -> PyResult<usize> {
         Ok(self.graph(py).nodes.len())
-    }
-});
-
-
-py_class!(class RustNode |py| {
-    data props: PyDict;
-
-    def __new__(_cls) -> PyResult<RustNode> {
-        RustNode::create_instance(py, PyDict::new(py))
     }
 });

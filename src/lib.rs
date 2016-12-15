@@ -69,8 +69,4 @@ pub mod node;
 pub mod edge;
 pub mod types;
 pub mod datamodel;
-pub mod dictionary;
 pub mod pythonffi;
-
-// Builders
-pub mod builders;

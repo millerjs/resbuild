@@ -1,4 +1,3 @@
-use ::dictionary::SCHEMAS;
 use ::edge::{EdgeType};
 use ::node::{NodeCategory, NodeType};
 use ::errors::{EBResult, EBError};
@@ -29,11 +28,11 @@ pub enum PropertyType {
 
 
 impl Datamodel {
-    pub fn new() -> EBResult<Datamodel> {
+    pub fn new(schemas: &Vec<String>) -> EBResult<Datamodel> {
         let mut node_types = HashMap::new();
-        let resolver = &Resolver::new()?;
+        let resolver = &Resolver::new(schemas)?;
 
-        for schema in SCHEMAS.iter() {
+        for schema in schemas.iter() {
             let yaml = load_yaml(schema.as_ref())?;
             let id = yaml_str(&yaml, "id")?;
 
@@ -204,15 +203,14 @@ pub fn load_yaml(source: &str) -> EBResult<Yaml> {
 
 
 impl Resolver {
-
-    fn new() -> EBResult<Resolver> {
-        let mut schemas = HashMap::new();
-        for schema in SCHEMAS.iter() {
+    fn new(schemas: &Vec<String>) -> EBResult<Resolver> {
+        let mut schema_map = HashMap::new();
+        for schema in schemas.iter() {
             let schema = load_yaml(&*schema)?;
             let label = yaml_str(&schema, "id")?.to_string();
-            schemas.insert(label, schema);
+            schema_map.insert(label, schema);
         }
-        Ok(Resolver { schemas: schemas })
+        Ok(Resolver { schemas: schema_map })
     }
 
     fn dereference<'a>(&'a self, referrer: &'a Yaml, identifier: &str) -> EBResult<&'a Yaml> {
