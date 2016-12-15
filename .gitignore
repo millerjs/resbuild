@@ -1,3 +1,8 @@
 target
 Cargo.lock
 src/dictionary.rs
+
+.eggs/*
+build/*
+dist/*
+resbuild.egg-info/*

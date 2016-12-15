@@ -3,7 +3,7 @@
 
 #[macro_use]
 extern crate log;
-extern crate esbuild;
+extern crate resbuild;
 extern crate openssl;
 extern crate postgres;
 extern crate serde;
@@ -12,12 +12,11 @@ extern crate env_logger;
 extern crate threadpool;
 extern crate scoped_pool;
 
-
-use esbuild::builders::legacy::LegacyBuilder;
-use esbuild::builders::common::{case_type_tree, Builder, Options, NodeTree};
-use esbuild::errors::EBResult;
-use esbuild::graph::{connect, CachingOptions, CachedGraph};
-use esbuild::datamodel::Datamodel;
+use resbuild::builders::legacy::LegacyBuilder;
+use resbuild::builders::common::{case_type_tree, Builder, Options, NodeTree};
+use resbuild::errors::EBResult;
+use resbuild::graph::{connect, CachingOptions, CachedGraph};
+use resbuild::datamodel::Datamodel;
 use postgres::Connection;
 use scoped_pool::Pool;
 use std::env;

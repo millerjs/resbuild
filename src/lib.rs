@@ -48,10 +48,9 @@
 
 #![allow(dead_code)]
 
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate quick_error;
+#[macro_use] extern crate cpython;
+#[macro_use] extern crate log;
+#[macro_use] extern crate quick_error;
 extern crate openssl;
 extern crate postgres;
 extern crate regex;
@@ -71,6 +70,7 @@ pub mod edge;
 pub mod types;
 pub mod datamodel;
 pub mod dictionary;
+pub mod pythonffi;
 
 // Builders
 pub mod builders;

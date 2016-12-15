@@ -1,5 +1,5 @@
 [package]
-name = "esbuild"
+name = "resbuild"
 version = "0.1.0"
 authors = ["Joshua Miller <jsmiller@uchicago.edu>"]
 build = "build.rs"
@@ -22,6 +22,15 @@ walkdir = "0.1.5"
 yaml-rust = "0.3.3"
 scoped-pool = "1"
 
+[dependencies.cpython]
+git = "https://github.com/dgrunwald/rust-cpython.git"
+default-features = false
+features = ["python27-sys"]
+
 [dependencies.postgres]
 version = "0.11.10"
 features = ["serde_json", "openssl"]
+
+[lib]
+name = "resbuild"
+crate-type = ["rlib", "dylib"]
