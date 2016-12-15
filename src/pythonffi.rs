@@ -14,6 +14,11 @@ impl EBError {
     }
 }
 
+/// try!() alternative that coerces Into<EBError> into PyErr
+macro_rules! pytry {
+    ($py:expr, $e:expr) => ($e.map_err(|e| EBError::from(e).to_pyerr($py))?);
+}
+
 /// Create our extension module
 py_module_initializer!(
     resbuild,
@@ -26,13 +31,6 @@ py_module_initializer!(
     }
 );
 
-macro_rules! pytry {
-    ($py:expr, $e:expr) => (match $e {
-        Ok(val) => val,
-        Err(err) => return Err(EBError::from(err).to_pyerr($py)),
-    });
-}
-
 py_class!(class RustCachedGraph |py| {
     data graph: CachedGraph;
 
@@ -40,7 +38,7 @@ py_class!(class RustCachedGraph |py| {
                 -> PyResult<RustCachedGraph>
     {
         let caching_options = &CachingOptions::new();
-        let datamodel = Datamodel::new().unwrap();
+        let datamodel = pytry!(py, Datamodel::new());
         let connection = pytry!(py, connect(host, database, user, password));
         let graph = pytry!(py, CachedGraph::from_postgres(
             caching_options, &datamodel, &connection));
