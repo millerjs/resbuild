@@ -3,7 +3,7 @@ use ::graph::{connect, CachingOptions, CachedGraph};
 use ::datamodel::Datamodel;
 use ::node::Node;
 use serde_json::Value;
-use cpython::{PyErr, Python, PyResult, PyDict, PythonObject, ToPyObject};
+use cpython::{PyErr, Python, PyResult, PyDict, PythonObject, ToPyObject, PyObject};
 use env_logger;
 
 /// Create custom Python Exception
@@ -31,8 +31,8 @@ macro_rules! pyobj {
 }
 
 
-/// try!() alternative that coerces Into<EBError> into PyErr
-fn extract_json_scalar(py: Python, val: &Value) -> PythonObject{
+/// Turn serde_json::Value into PyObject
+fn extract_json_scalar(py: Python, val: &Value) -> PyObject {
     match *val {
         Value::Null => py.None(),
         Value::Bool(ref val) => pyobj!(py, val),
