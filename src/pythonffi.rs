@@ -94,8 +94,10 @@ fn map_rustedge(py: Python, edges: &Vec<Edge>) -> PyResult<Vec<RustEdge>> {
 }
 
 
+use std::sync::{Arc, RwLock};
+
 py_class!(class RustCachedGraph |py| {
-    data graph: CachedGraph;
+    data graph: Arc<RwLock<CachedGraph>>;
 
     def __new__(_cls, schemas: Vec<String>,
                 host: &str, database: &str, user: &str, password: &str)
@@ -109,40 +111,44 @@ py_class!(class RustCachedGraph |py| {
         let graph = pytry!(py, CachedGraph::from_postgres(
             caching_options, &datamodel, &connection));
 
-        RustCachedGraph::create_instance(py, graph)
+        RustCachedGraph::create_instance(py, Arc::new(RwLock::new(graph)))
     }
 
     def node_count(&self) -> PyResult<usize> {
-        Ok(self.graph(py).nodes.len())
+        Ok(self.graph(py).read().unwrap().nodes.len())
     }
 
     def get_node(&self, id: String) -> PyResult<RustNode> {
-        pytry!(py, self.graph(py).get_node(&id).map(|n| n.to_py(py))
-               .ok_or(format!("Node '{}' not found", id)))
+        pytry!(py, self.graph(py).read().unwrap().get_node(&id)
+               .map(|n| n.to_py(py)).ok_or(format!("Node '{}' not found", id)))
     }
 
     def neighbors(&self, id: String) -> PyResult<Vec<RustNode>> {
-        map_rustnode(py, &self.graph(py).neighbors(&id))
+        map_rustnode(py, &self.graph(py).read().unwrap().
+                     neighbors(&id))
     }
 
     def neighbors_labeled(&self, id: String, labels: Vec<String>) -> PyResult<Vec<RustNode>> {
-        map_rustnode(py, &self.graph(py).neighbors_labeled(&id, &labels))
+        map_rustnode(py, &self.graph(py).read().unwrap().
+                     neighbors_labeled(&id, &labels))
     }
 
     def nodes_labeled(&self, labels: Vec<String>) -> PyResult<Vec<RustNode>> {
-        map_rustnode(py, &self.graph(py).nodes_labeled(&labels))
+        map_rustnode(py, &self.graph(py).read().unwrap().
+                     nodes_labeled(&labels))
     }
 
     def get_edges(&self, src_id: String, dst_id: String) -> PyResult<Vec<RustEdge>> {
-        map_rustedge(py, self.graph(py).get_edges(&src_id, &dst_id).unwrap_or(&vec![]))
+        map_rustedge(py, self.graph(py).read().unwrap().
+                     get_edges(&src_id, &dst_id).unwrap_or(&vec![]))
     }
 
     def get_node_ids(&self) -> PyResult<Vec<String>> {
-        Ok(self.graph(py).nodes.keys().map(|id| id.clone()).collect())
+        Ok(self.graph(py).read().unwrap().nodes.keys().map(|id| id.clone()).collect())
     }
 
     def remove_nodes_from(&self, ids: Vec<String>) -> PyResult<usize> {
-        Ok(ids.iter().map(|id| self.graph(py).remove_node(id))
+        Ok(ids.iter().map(|id| self.graph(py).write().unwrap().remove_node(id))
            .filter(|n| n.is_some()).count())
     }
 
