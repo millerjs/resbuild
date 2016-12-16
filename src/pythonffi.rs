@@ -1,10 +1,21 @@
+use ::datamodel::Datamodel;
 use ::errors::EBError;
 use ::graph::{connect, CachingOptions, CachedGraph};
-use ::datamodel::Datamodel;
 use ::node::Node;
-use serde_json::Value;
-use cpython::{PyErr, Python, PyResult, PyDict, PythonObject, ToPyObject, PyObject};
+use ::edge::Edge;
+
 use env_logger;
+use serde_json::Value;
+
+use cpython::{
+    PyErr,
+    Python,
+    PyResult,
+    PyDict,
+    PythonObject,
+    ToPyObject,
+    PyObject,
+};
 
 /// Create custom Python Exception
 py_exception!(resbuild, RustEBError);
@@ -65,10 +76,21 @@ impl Node {
     }
 }
 
+impl Edge {
+    fn to_py(&self, py: Python) -> PyResult<RustEdge> {
+        RustEdge::create_instance(py, self.clone())
+    }
+}
 
-/// Map a Vec<Node> to python list representation
+
+/// map a Vec<Node> to python list representation
 fn map_rustnode(py: Python, nodes: &Vec<&Node>) -> PyResult<Vec<RustNode>> {
     nodes.iter().map(|n| n.to_py(py)).collect()
+}
+
+/// Map a Vec<Edge> to python list representation
+fn map_rustedge(py: Python, edges: &Vec<Edge>) -> PyResult<Vec<RustEdge>> {
+    edges.iter().map(|e| e.to_py(py)).collect()
 }
 
 
@@ -103,26 +125,36 @@ py_class!(class RustCachedGraph |py| {
         map_rustnode(py, &self.graph(py).neighbors(&id))
     }
 
-    def neighbors_labeled(&self, id: String, label: String) -> PyResult<Vec<RustNode>> {
-        map_rustnode(py, &self.graph(py).neighbors_labeled(&id, &label))
+    def neighbors_labeled(&self, id: String, labels: Vec<String>) -> PyResult<Vec<RustNode>> {
+        map_rustnode(py, &self.graph(py).neighbors_labeled(&id, &labels))
     }
 
     def nodes_labeled(&self, labels: Vec<String>) -> PyResult<Vec<RustNode>> {
-        map_rustnode(py, &self.graph(py).nodes_labeled(labels))
+        map_rustnode(py, &self.graph(py).nodes_labeled(&labels))
     }
+
+    def get_edges(&self, src_id: String, dst_id: String) -> PyResult<Vec<RustEdge>> {
+        map_rustedge(py, self.graph(py).get_edges(&src_id, &dst_id).unwrap_or(&vec![]))
+    }
+
+    def get_node_ids(&self) -> PyResult<Vec<String>> {
+        Ok(self.graph(py).nodes.keys().map(|id| id.clone()).collect())
+    }
+
+    def remove_nodes_from(&self, ids: Vec<String>) -> PyResult<usize> {
+        Ok(ids.iter().map(|id| self.graph(py).remove_node(id))
+           .filter(|n| n.is_some()).count())
+    }
+
 });
 
 
 py_class!(class RustNode |py| {
     data data: Node;
 
-    def __repr__(&self) -> PyResult<String> {
-        Ok(self.data(py).to_string())
-    }
-
-    def label(&self) -> PyResult<String> {
-        Ok(self.data(py).label.clone())
-    }
+    def __repr__(&self) -> PyResult<String> { Ok(self.data(py).to_string())   }
+    def label(&self) -> PyResult<String>    { Ok(self.data(py).label.clone()) }
+    def node_id(&self) -> PyResult<String>  { Ok(self.data(py).id.clone())    }
 
     def props(&self) -> PyResult<PyDict> {
         let dict = PyDict::new(py);
@@ -133,6 +165,22 @@ py_class!(class RustNode |py| {
         Ok(dict)
     }
 
+    def acl(&self) -> PyResult<Vec<String>> {
+        Ok(self.data(py).acl.clone())
+    }
+
+    def get_prop(&self, key: String) -> PyResult<PyObject> {
+        Ok(self.data(py).props.get(&key)
+            .map(|v| extract_json_scalar(py, v))
+            .unwrap_or(py.None()))
+    }
+
+    def get_sysan(&self, key: String) -> PyResult<PyObject> {
+        Ok(self.data(py).sysan.get(&key)
+            .map(|v| extract_json_scalar(py, v))
+            .unwrap_or(py.None()))
+    }
+
     def sysan(&self) -> PyResult<PyDict> {
         let dict = PyDict::new(py);
         let node = self.data(py);
@@ -141,5 +189,14 @@ py_class!(class RustNode |py| {
         }
         Ok(dict)
     }
+});
 
+
+py_class!(class RustEdge |py| {
+    data data: Edge;
+
+    def __repr__(&self) -> PyResult<String> { Ok(self.data(py).to_string())    }
+    def label(&self) -> PyResult<String>    { Ok(self.data(py).label.clone())  }
+    def src_id(&self) -> PyResult<String>   { Ok(self.data(py).src_id.clone()) }
+    def dst_id(&self) -> PyResult<String>   { Ok(self.data(py).src_id.clone()) }
 });

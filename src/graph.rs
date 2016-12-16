@@ -14,6 +14,7 @@ use postgres::{Connection, SslMode};
 use serde_json::Value;
 use std::collections::{HashSet, HashMap};
 use std::fmt::Display;
+use std::hash::Hash;
 use regex::Regex;
 
 
@@ -58,6 +59,18 @@ impl CachingOptions {
             supplement_regexes: Vec::new(),
         }
     }
+}
+
+
+/// Turn a vec of hashable items into a set
+fn vec_to_set<T>(source: &Vec<T>) -> HashSet<T>
+    where T: Hash + Eq + Clone
+{
+    let mut ret = HashSet::<T>::new();
+    for item in source {
+        ret.insert(item.clone());
+    }
+    ret
 }
 
 
@@ -119,12 +132,9 @@ impl CachedGraph {
     }
 
     /// Returns a vector of all node references with a given label
-    pub fn nodes_labeled<'a>(&'a self, labels_: Vec<String>) -> Vec<&'a Node>
+    pub fn nodes_labeled<'a>(&'a self, labels_: &Vec<String>) -> Vec<&'a Node>
     {
-        let mut labels = HashSet::new();
-        for label in labels_ {
-            labels.insert(label);
-        }
+        let labels = vec_to_set(labels_);
         self.nodes.values().filter(|node| labels.contains(&node.label)).collect()
     }
 
@@ -143,13 +153,14 @@ impl CachedGraph {
 
     /// Returns a vec of node references that are adjacent to the node
     /// with the given `id` and have a given `label`
-    pub fn neighbors_labeled<'a>(&'a self, id: &String, label: &String) -> Vec<&'a Node>
+    pub fn neighbors_labeled<'a>(&'a self, id: &String, labels_: &Vec<String>) -> Vec<&'a Node>
     {
+        let labels = vec_to_set(labels_);
         // edges should be bidirectional, just pick one direction
         match self.graph.get(id) {
             Some(map) => {
                 map.iter().map(|(dst, _)| self.get_node(dst).unwrap())
-                    .filter(|node| &node.label == label)
+                    .filter(|node| labels.contains(&node.label))
                     .collect()
             },
             None => Vec::new(),
@@ -167,6 +178,25 @@ impl CachedGraph {
     pub fn add_node(&mut self, node: Node)
     {
         self.nodes.insert(node.id.clone(), node);
+    }
+
+    /// Remove a node and associated edges from the graph
+    pub fn remove_node(&mut self, id: &String) -> Option<Node>
+    {
+        let neighbor_ids = self.neighbors(id).iter()
+            .map(|n| n.id.clone()).collect::<Vec<_>>();
+
+        // Delete edges where node = src
+        self.graph.remove(id);
+
+        // Delete edges where node = dst
+        for neighbor_id in neighbor_ids {
+            if let Some(src) = self.graph.get_mut(&neighbor_id) {
+                src.remove(id);
+            }
+        }
+
+        self.nodes.remove(id)
     }
 
     /// Loads all Node and Edge tables defined in the datamodel using the
