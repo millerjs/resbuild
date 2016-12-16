@@ -180,6 +180,51 @@ impl CachedGraph {
         self.nodes.insert(node.id.clone(), node);
     }
 
+    pub fn walk_path<'a>(&'a self, node_id: &String, path: &[String], whole: bool)
+                         -> Vec<&'a Node>
+    {
+        let mut found = HashSet::<String>::new();
+        let mut nodes = Vec::<&Node>::new();
+
+        if path.len() == 0 {
+            return vec![]
+        }
+
+        let neighbors = self.neighbors_labeled(node_id, &vec![path[0].clone()]);
+
+        for neighbor in neighbors {
+            for node in self.walk_path(&neighbor.id, &path[1..], whole) {
+                if !found.contains(&node.id.clone()) {
+                    found.insert(node.id.clone());
+                    nodes.push(node);
+                }
+            }
+            if whole || (path.len() == 1 && neighbor.label == path[0]) {
+                if !found.contains(&neighbor.id.clone()) {
+                    found.insert(neighbor.id.clone());
+                    nodes.push(neighbor);
+                }
+            }
+        };
+
+        nodes
+    }
+
+    pub fn walk_paths<'a>(&'a self, node_id: &String, paths: &Vec<Vec<String>>, whole: bool)
+                          -> Vec<&'a Node>
+    {
+        let mut found = HashSet::<String>::new();
+        let mut nodes = Vec::<&Node>::new();
+
+        for path in paths {
+            for node in self.walk_path(node_id, &path[..], whole) {
+                found.insert(node.id.clone());
+                nodes.push(node);
+            }
+        }
+        nodes
+    }
+
     /// Remove a node and associated edges from the graph
     pub fn remove_node(&mut self, id: &String) -> Option<Node>
     {

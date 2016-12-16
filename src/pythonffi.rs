@@ -6,15 +6,18 @@ use ::edge::Edge;
 
 use env_logger;
 use serde_json::Value;
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 
+use cpython::py_class::CompareOp;
 use cpython::{
-    PyErr,
-    Python,
-    PyResult,
     PyDict,
+    PyErr,
+    PyObject,
+    PyResult,
+    Python,
     PythonObject,
     ToPyObject,
-    PyObject,
 };
 
 /// Create custom Python Exception
@@ -62,6 +65,7 @@ py_module_initializer!(
     initresbuild,
     PyInit_resbuild, |py, m|
     {
+        env_logger::init().unwrap_or(());
         try!(m.add(py, "__doc__", "GDC Datamodel features in rust."));
         try!(m.add_class::<RustCachedGraph>(py));
         try!(m.add_class::<RustNode>(py));
@@ -103,8 +107,6 @@ py_class!(class RustCachedGraph |py| {
                 host: &str, database: &str, user: &str, password: &str)
                 -> PyResult<RustCachedGraph>
     {
-        env_logger::init().unwrap();
-
         let caching_options = &CachingOptions::new();
         let datamodel = pytry!(py, Datamodel::new(&schemas));
         let connection = pytry!(py, connect(host, database, user, password));
@@ -147,11 +149,22 @@ py_class!(class RustCachedGraph |py| {
         Ok(self.graph(py).read().unwrap().nodes.keys().map(|id| id.clone()).collect())
     }
 
+    def walk_path(&self, node_id: String, path: Vec<String>, whole: bool)
+                  -> PyResult<Vec<RustNode>>
+    {
+        map_rustnode(py, &self.graph(py).read().unwrap().walk_path(&node_id, &path[..], whole))
+    }
+
+    def walk_paths(&self, node_id: String, paths: Vec<Vec<String>>, whole: bool)
+                  -> PyResult<Vec<RustNode>>
+    {
+        map_rustnode(py, &self.graph(py).read().unwrap().walk_paths(&node_id, &paths, whole))
+    }
+
     def remove_nodes_from(&self, ids: Vec<String>) -> PyResult<usize> {
         Ok(ids.iter().map(|id| self.graph(py).write().unwrap().remove_node(id))
            .filter(|n| n.is_some()).count())
     }
-
 });
 
 
@@ -179,6 +192,21 @@ py_class!(class RustNode |py| {
         Ok(self.data(py).props.get(&key)
             .map(|v| extract_json_scalar(py, v))
             .unwrap_or(py.None()))
+    }
+
+    def __richcmp__(&self, other: RustNode, op: CompareOp) -> PyResult<bool> {
+        /// Tell Python how to compare equality on nodes
+        Ok(match op {
+            CompareOp::Eq => other.data(py).id == self.data(py).id,
+            _ => false
+        })
+    }
+
+    def __hash__(&self) -> PyResult<u64> {
+        /// to be able to add it to a set
+        let mut hasher = DefaultHasher::new();
+        self.data(py).id.hash(&mut hasher);
+        Ok(hasher.finish())
     }
 
     def get_sysan(&self, key: String) -> PyResult<PyObject> {
