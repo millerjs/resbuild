@@ -9,6 +9,7 @@ use ::node::{Node, NodeType};
 use ::types::Doc;
 use ::datamodel::Datamodel;
 use openssl;
+use pbr::ProgressBar;
 use postgres::error::ConnectError;
 use postgres::{Connection, SslMode};
 use serde_json::Value;
@@ -147,7 +148,7 @@ impl CachedGraph {
             Some(map) => {
                 map.iter().map(|(dst, _)| self.get_node(dst).unwrap()).collect()
             },
-            None => { println!("no edges"); Vec::new()},
+            None => Vec::new(),
         }
     }
 
@@ -253,21 +254,31 @@ impl CachedGraph {
         let mut graph = CachedGraph::new();
 
         // Load all nodes first
+        let mut progress_bar = ProgressBar::new(datamodel.node_types.len() as u64);
         for (_, node_type) in &datamodel.node_types {
+            progress_bar.message(&*format!("Loading nodes {:50} ", node_type.label));
+
             let nodes: Vec<Node> = load_node_table(node_type, &connection)?;
             for node in nodes {
                 graph.add_node(node);
             }
+            progress_bar.inc();
         }
 
         // Load all edges to point to already loaded nodes
+        let mut progress_bar = ProgressBar::new(datamodel.node_types.len() as u64);
         for (_, node_type) in &datamodel.node_types {
             for link in &node_type.links {
+
+                let edge_name = format!("{:}->{:}->{:}", link.src_label, link.label, link.dst_label);
+                progress_bar.message(&*format!("Loading edges {:50} ", edge_name));
+
                 let edges = load_edge_table(link, &connection)?;
                 for edge in edges {
                     graph.add_edge(edge)?;
                 }
             }
+            progress_bar.inc();
         }
 
         info!("Loaded {} nodes from postgres", graph.nodes.len());

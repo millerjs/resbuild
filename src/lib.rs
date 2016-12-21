@@ -35,16 +35,7 @@
 //! remembering which nodes are walked through a lot and remembering
 //! which neighbors they have with a given label.
 //!
-//! NOTE: An attempt was made to do this whole thing in parallel,
-//! however the memory footprint grew to large.  The best method for
-//! doing this is to use the main process as a workload distributer,
-//! and have child processes denormalizing cases.  This way, the main
-//! thread can upsert files on an outbound queue from child processes.
-//!
 //! - Josh (jsmiller@uchicago.edu)
-//!
-//! TODOS:
-//!   - figure out a way to parallelize without excess copies
 
 #![allow(dead_code)]
 
@@ -61,6 +52,7 @@ extern crate walkdir;
 extern crate yaml_rust;
 extern crate crypto;
 extern crate env_logger;
+extern crate pbr;
 
 #[macro_use]
 pub mod macros;

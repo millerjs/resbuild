@@ -5,14 +5,17 @@ use ::node::Node;
 use ::edge::Edge;
 
 use env_logger;
+use pbr::ProgressBar;
 use serde_json::Value;
 use std::hash::{Hash, Hasher};
-use std::collections::hash_map::DefaultHasher;
+use std::collections::hash_map::{DefaultHasher, HashMap};
+
 
 use cpython::py_class::CompareOp;
 use cpython::{
     PyDict,
     PyErr,
+    PyList,
     PyObject,
     PyResult,
     Python,
@@ -23,6 +26,7 @@ use cpython::{
 /// Create custom Python Exception
 py_exception!(resbuild, RustEBError);
 
+type Path = Vec<String>;
 
 impl EBError {
     /// Convert EBError to PyErr (can't impl Into because we require
@@ -39,11 +43,23 @@ macro_rules! pytry {
 }
 
 
-/// try!() alternative that coerces Into<EBError> into PyErr
 macro_rules! pyobj {
     ($py:expr, $val:expr) => ($val.to_py_object($py).into_object());
 }
 
+
+
+/// Convert a pydict of `str -> [[str]]` to native rust to represent a
+/// list of paths for a given label
+fn pydict_to_path_map(py: Python, dict: &PyDict) -> PyResult<HashMap<String, Vec<Path>>> {
+    let mut path_map: HashMap<String, Vec<Path>> = HashMap::new();
+    for (label, paths) in dict.items(py) {
+        let label: String = label.extract(py)?;
+        let paths: Vec<Path> = paths.extract(py)?;
+        path_map.insert(label, paths);
+    }
+    Ok(path_map)
+}
 
 /// Turn serde_json::Value into PyObject
 fn extract_json_scalar(py: Python, val: &Value) -> PyObject {
@@ -65,7 +81,6 @@ py_module_initializer!(
     initresbuild,
     PyInit_resbuild, |py, m|
     {
-        env_logger::init().unwrap_or(());
         try!(m.add(py, "__doc__", "GDC Datamodel features in rust."));
         try!(m.add_class::<RustCachedGraph>(py));
         try!(m.add_class::<RustNode>(py));
@@ -107,6 +122,8 @@ py_class!(class RustCachedGraph |py| {
                 host: &str, database: &str, user: &str, password: &str)
                 -> PyResult<RustCachedGraph>
     {
+        env_logger::init().unwrap_or(());
+
         let caching_options = &CachingOptions::new();
         let datamodel = pytry!(py, Datamodel::new(&schemas));
         let connection = pytry!(py, connect(host, database, user, password));
@@ -155,7 +172,7 @@ py_class!(class RustCachedGraph |py| {
         map_rustnode(py, &self.graph(py).read().unwrap().walk_path(&node_id, &path[..], whole))
     }
 
-    def walk_paths(&self, node_id: String, paths: Vec<Vec<String>>, whole: bool)
+    def walk_paths(&self, node_id: String, paths: Vec<Path>, whole: bool)
                   -> PyResult<Vec<RustNode>>
     {
         map_rustnode(py, &self.graph(py).read().unwrap().walk_paths(&node_id, &paths, whole))
@@ -165,6 +182,70 @@ py_class!(class RustCachedGraph |py| {
         Ok(ids.iter().map(|id| self.graph(py).write().unwrap().remove_node(id))
            .filter(|n| n.is_some()).count())
     }
+
+    def compute_file_paths(&self, file_labels: Vec<String>, _path_map: PyDict)
+                           -> PyResult<PyDict>
+    {
+        let relevant_nodes = PyDict::new(py);
+        let graph = self.graph(py).read().unwrap();
+        let path_map = pydict_to_path_map(py, &_path_map)?;
+        let files = graph.nodes_labeled(&file_labels);
+
+        let mut progress_bar = ProgressBar::new(files.len() as u64);
+        progress_bar.message("Caching file paths: ");
+
+        for file in &files {
+            let paths = pytry!(py, path_map.get(&file.label).ok_or(
+                format!("Missing '{}' path", file.label)));
+
+            let nodes = graph.walk_paths(&file.id, &paths, true).iter()
+                .map(|n| pyobj!(py, &n.id)).collect::<Vec<_>>();
+
+            relevant_nodes.set_item(py, file.id.clone(), PyList::new(py, &nodes[..]))?;
+            progress_bar.inc();
+        }
+
+        Ok(relevant_nodes)
+    }
+
+    def compute_entity_cases(&self, assoc_entity_labels: Vec<String>, _path_map: PyDict)
+                             -> PyResult<PyDict>
+    {
+        let graph = self.graph(py).read().unwrap();
+        let entities = graph.nodes_labeled(&assoc_entity_labels);
+        let path_map = pydict_to_path_map(py, &_path_map)?;
+
+        let mut progress_bar = ProgressBar::new(entities.len() as u64);
+        progress_bar.message("Caching entity cases: ");
+
+        let entity_cases = PyDict::new(py);
+
+        for entity in entities {
+            if entity.label == "case" {
+                // if the associated entity is a case, it's case is
+                // just itself. this is kindy of sketchy but w/e
+                entity_cases.set_item(py, pyobj!(py, &entity.id), pyobj!(py, &entity.id))?;
+
+            } else {
+                let paths = pytry!(py, path_map.get(&entity.label).ok_or(
+                    format!("Missing '{}' path", entity.label)));
+                let cases = graph.walk_paths(&entity.id, &paths, false);
+
+                if cases.len() > 1 {
+                    warn!("Entity associated with > 1 case {}: Found {} cases",
+                          entity, cases.len());
+                }
+
+                if cases.len() > 0 {
+                    entity_cases.set_item(py, pyobj!(py, &entity.id), pyobj!(py, &cases[0].id))?;
+                }
+
+            }
+        }
+        Ok(entity_cases)
+    }
+
+
 });
 
 
@@ -223,6 +304,7 @@ py_class!(class RustNode |py| {
         }
         Ok(dict)
     }
+
 });
 
 
